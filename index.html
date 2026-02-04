@@ -65,7 +65,7 @@
     background: var(--color-chart-bg);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 12px;
-    margin-bottom: 12px;
+    margin-top: 12px;
     flex-shrink: 0;
     overflow: hidden;
     width: 100%;
@@ -379,6 +379,19 @@
   <img src="logo cute crypto.svg" alt="Cute Crypto Charts" style="filter: brightness(0) invert(1);">
 </div>
 
+<div class="bottom-bar">
+  <div class="timeframe-btns">
+    <button class="active" data-interval="1m">1m</button>
+    <button data-interval="30m">30m</button>
+    <button data-interval="1d">1d</button>
+  </div>
+  <p class="subtitle" id="sourceLabel">SOL / USDT &mdash; Binance</p>
+</div>
+
+<div class="chart-container">
+  <div id="chart" class="loading">Loading...</div>
+</div>
+
 <div class="customize-panel" id="customizePanel">
   <div class="customize-header" id="customizeHeader">
     <span>Customize</span>
@@ -396,18 +409,6 @@
     <div class="emoji-popup" id="downPopup"></div>
   </div>
   <div class="color-picker">
-    <label>Text</label>
-    <input type="color" id="colorText" value="#e0e0e0">
-  </div>
-  <div class="color-picker">
-    <label>Chart</label>
-    <input type="color" id="colorChart" value="#16213e">
-  </div>
-  <div class="color-picker">
-    <label>Page</label>
-    <input type="color" id="colorPage" value="#1a1a2e">
-  </div>
-  <div class="color-picker">
     <label>Font</label>
     <select id="fontPicker">
       <option value="'Bangers', cursive" selected>Bangers</option>
@@ -423,18 +424,20 @@
     </select>
   </div>
   </div>
-</div>
-
-<div class="chart-container">
-  <div id="chart" class="loading">Loading...</div>
-</div>
-<div class="bottom-bar">
-  <div class="timeframe-btns">
-    <button class="active" data-interval="1m">1m</button>
-    <button data-interval="30m">30m</button>
-    <button data-interval="1d">1d</button>
+  <div class="controls">
+  <div class="color-picker">
+    <label>Text</label>
+    <input type="color" id="colorText" value="#e0e0e0">
   </div>
-  <p class="subtitle" id="sourceLabel">SOL / USDT &mdash; Binance</p>
+  <div class="color-picker">
+    <label>Chart</label>
+    <input type="color" id="colorChart" value="#16213e">
+  </div>
+  <div class="color-picker">
+    <label>Page</label>
+    <input type="color" id="colorPage" value="#1a1a2e">
+  </div>
+  </div>
 </div>
 
 <script>
