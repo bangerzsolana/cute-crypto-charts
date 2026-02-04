@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(brew list:*)",
+      "Bash(git -C /Users/karina/Dev/my-first-project diff index.html)",
+      "Bash(git -C /Users/karina/Dev/my-first-project add index.html)"
+    ]
+  }
+}

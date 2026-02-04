@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Adorable emoji-based crypto candlestick charts for SOL/USDT. Customize emojis, colors, and fonts!">
+<meta property="og:title" content="Cute Crypto Charts">
+<meta property="og:description" content="Adorable emoji-based crypto candlestick charts for SOL/USDT">
+<meta property="og:image" content="https://cutecryptocharts.com/og-image.png">
+<meta property="og:url" content="https://cutecryptocharts.com">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cute Crypto Charts">
+<meta name="twitter:description" content="Adorable emoji-based crypto candlestick charts for SOL/USDT">
+<meta name="twitter:image" content="https://cutecryptocharts.com/og-image.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Space+Mono:wght@400;700&family=Fredoka:wght@400;600&family=Bubblegum+Sans&family=Press+Start+2P&family=Righteous&family=Pacifico&family=Bungee&display=swap" rel="stylesheet">
@@ -49,13 +61,54 @@
   }
   h1 { font-size: 1.5rem; margin-bottom: 8px; color: var(--color-text); flex-shrink: 0; }
   .subtitle { color: var(--color-text); opacity: 0.6; font-size: 0.85rem; margin-bottom: 8px; flex-shrink: 0; }
+  .customize-panel {
+    background: var(--color-chart-bg);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+    overflow: hidden;
+    width: 100%;
+    max-width: 700px;
+  }
+  .customize-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .customize-header span {
+    font-size: 0.85rem;
+    color: var(--color-text);
+    opacity: 0.7;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .customize-toggle {
+    background: none;
+    border: none;
+    color: var(--color-text);
+    opacity: 0.5;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: transform 0.2s;
+    padding: 0 4px;
+  }
+  .customize-panel.collapsed .customize-toggle {
+    transform: rotate(180deg);
+  }
+  .customize-panel.collapsed .controls {
+    display: none;
+  }
   .controls {
     display: flex;
     gap: 20px;
     align-items: center;
     flex-wrap: wrap;
     justify-content: center;
-    margin-bottom: 12px;
+    padding: 0 16px 12px;
     flex-shrink: 0;
   }
   .emoji-picker {
@@ -326,7 +379,12 @@
   <img src="logo cute crypto.svg" alt="Cute Crypto Charts" style="filter: brightness(0) invert(1);">
 </div>
 
-<div class="controls">
+<div class="customize-panel" id="customizePanel">
+  <div class="customize-header" id="customizeHeader">
+    <span>Customize</span>
+    <button class="customize-toggle">▲</button>
+  </div>
+  <div class="controls">
   <div class="emoji-picker" id="upPicker">
     <label>Up:</label>
     <button class="emoji-btn" id="upBtn">😊</button>
@@ -363,6 +421,7 @@
       <option value="'Pacifico', cursive">Pacifico</option>
       <option value="'Bungee', sans-serif">Bungee</option>
     </select>
+  </div>
   </div>
 </div>
 
