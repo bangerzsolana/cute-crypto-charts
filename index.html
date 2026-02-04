@@ -366,6 +366,20 @@
     color: var(--color-text);
     opacity: 0.5;
   }
+  .coin-select-wrap {
+    position: relative;
+    display: inline-block;
+  }
+  .coin-select-wrap::after {
+    content: '▼';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text);
+    font-size: 0.6rem;
+    pointer-events: none;
+  }
   .coin-select {
     background: transparent;
     border: 1px solid var(--color-text);
@@ -373,7 +387,7 @@
     color: var(--color-text);
     font-family: var(--font-family);
     font-size: 0.9rem;
-    padding: 8px 16px;
+    padding: 8px 28px 8px 16px;
     cursor: pointer;
     -webkit-appearance: none;
     -moz-appearance: none;
@@ -407,11 +421,13 @@
     <button data-interval="30m">30m</button>
     <button data-interval="1d">1d</button>
   </div>
-  <select id="coinPicker" class="coin-select">
-    <option value="SOL" selected>SOL / USDT ▲</option>
-    <option value="BTC">BTC / USDT</option>
-    <option value="ETH">ETH / USDT</option>
-  </select>
+  <div class="coin-select-wrap">
+    <select id="coinPicker" class="coin-select">
+      <option value="SOL" selected>SOL / USDT</option>
+      <option value="BTC">BTC / USDT</option>
+      <option value="ETH">ETH / USDT</option>
+    </select>
+  </div>
 </div>
 
 <div class="chart-container">
@@ -480,6 +496,8 @@ const Y_TICKS = 8;
 let currentInterval = '1m';
 let upEmoji = '😊';
 let downEmoji = '😡';
+let savedUpEmoji = upEmoji;
+let savedDownEmoji = downEmoji;
 
 const chartEl = document.getElementById('chart');
 
@@ -527,8 +545,8 @@ function setupEmojiPicker(btnId, popupId, initial, onSelect) {
   });
 }
 
-setupEmojiPicker('upBtn', 'upPopup', upEmoji, v => upEmoji = v);
-setupEmojiPicker('downBtn', 'downPopup', downEmoji, v => downEmoji = v);
+setupEmojiPicker('upBtn', 'upPopup', upEmoji, v => { upEmoji = v; savedUpEmoji = v; });
+setupEmojiPicker('downBtn', 'downPopup', downEmoji, v => { downEmoji = v; savedDownEmoji = v; });
 
 // Close popups on outside click
 document.addEventListener('click', () => {
@@ -602,6 +620,8 @@ function randomize() {
   while (i2 === i1) i2 = Math.floor(Math.random() * EMOJI_LIST.length);
   upEmoji = EMOJI_LIST[i1];
   downEmoji = EMOJI_LIST[i2];
+  savedUpEmoji = upEmoji;
+  savedDownEmoji = downEmoji;
   document.getElementById('upBtn').textContent = upEmoji;
   document.getElementById('downBtn').textContent = downEmoji;
 
@@ -649,8 +669,23 @@ document.getElementById('customizeHeader').addEventListener('click', () => {
 });
 
 // --- Coin picker ---
+function applyCoinEmoji() {
+  if (currentCoin === 'ETH') {
+    upEmoji = '💩';
+    downEmoji = '💩';
+    document.getElementById('upBtn').textContent = '💩';
+    document.getElementById('downBtn').textContent = '💩';
+  } else {
+    upEmoji = savedUpEmoji;
+    downEmoji = savedDownEmoji;
+    document.getElementById('upBtn').textContent = upEmoji;
+    document.getElementById('downBtn').textContent = downEmoji;
+  }
+}
+
 document.getElementById('coinPicker').addEventListener('change', e => {
   currentCoin = e.target.value;
+  applyCoinEmoji();
   closeWebSocket();
   fetchAndRender();
 });
