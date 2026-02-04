@@ -223,6 +223,13 @@
   .timeframe-btns {
     display: flex;
     gap: 6px;
+    align-items: center;
+  }
+  .zoom-separator {
+    color: var(--color-text);
+    opacity: 0.3;
+    margin: 0 2px;
+    user-select: none;
   }
   .timeframe-btns button {
     padding: 8px 16px;
@@ -419,6 +426,9 @@
     <button class="active" data-interval="1m">1m</button>
     <button data-interval="30m">30m</button>
     <button data-interval="1d">1d</button>
+    <span class="zoom-separator">|</span>
+    <button id="zoomOut" title="Zoom out">−</button>
+    <button id="zoomIn" title="Zoom in">+</button>
   </div>
   <div class="coin-select-wrap">
     <select id="coinPicker" class="coin-select">
@@ -493,6 +503,8 @@ const EMOJI_HEIGHT = 16;
 const Y_TICKS = 8;
 
 let currentInterval = '1m';
+let zoomLevel = 1;
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3];
 let upEmoji = '😊';
 let downEmoji = '😡';
 let savedUpEmoji = upEmoji;
@@ -700,6 +712,22 @@ document.querySelectorAll('[data-interval]').forEach(btn => {
   });
 });
 
+// --- Zoom controls ---
+document.getElementById('zoomIn').addEventListener('click', () => {
+  const idx = ZOOM_STEPS.indexOf(zoomLevel);
+  if (idx < ZOOM_STEPS.length - 1) {
+    zoomLevel = ZOOM_STEPS[idx + 1];
+    renderChart();
+  }
+});
+document.getElementById('zoomOut').addEventListener('click', () => {
+  const idx = ZOOM_STEPS.indexOf(zoomLevel);
+  if (idx > 0) {
+    zoomLevel = ZOOM_STEPS[idx - 1];
+    renderChart();
+  }
+});
+
 // --- Chart ---
 let candles = [];
 let dataSource = 'Binance';
@@ -836,12 +864,15 @@ function renderChart() {
     const bottomOffset = lowPx;
 
     let emojis = '';
+    const emojiFontSize = 14 * zoomLevel;
+    const emojiLineHeight = 16 * zoomLevel;
     for (let i = 0; i < emojiCount; i++) {
-      emojis += `<span class="emoji">${emoji}</span>`;
+      emojis += `<span class="emoji" style="font-size:${emojiFontSize}px;line-height:${emojiLineHeight}px;height:${emojiLineHeight}px;">${emoji}</span>`;
     }
 
+    const candleMinWidth = 22 * zoomLevel;
     candlesHtml += `
-      <div class="candle-col">
+      <div class="candle-col" style="min-width:${candleMinWidth}px;">
         <div class="candle-inner" style="margin-bottom:${bottomOffset}px;">
           <div class="wick" style="height:${Math.max(0, upperWick)}px;"></div>
           <div class="candle-body">${emojis}</div>
@@ -850,7 +881,7 @@ function renderChart() {
       </div>`;
 
     const showLabel = shouldShowLabel(c.time, idx);
-    xAxisHtml += `<div class="x-label-cell" style="min-width:22px;">${showLabel ? formatTime(c.time) : ''}</div>`;
+    xAxisHtml += `<div class="x-label-cell" style="min-width:${candleMinWidth}px;">${showLabel ? formatTime(c.time) : ''}</div>`;
   });
 
   const currentPrice = candles[candles.length - 1].close;
@@ -858,14 +889,14 @@ function renderChart() {
   chartEl.className = 'chart-grid';
   chartEl.innerHTML = `
     <div class="candles-scroll" id="candlesScroll">
-      <div class="candles-area" style="height:${CHART_HEIGHT}px;">${candlesHtml}</div>
+      <div class="candles-area" style="height:${CHART_HEIGHT}px;gap:${2 * zoomLevel}px;">${candlesHtml}</div>
     </div>
     <div class="y-axis" style="height:${CHART_HEIGHT}px;">
       ${yAxisHtml}
       <div class="price-tag" style="bottom:${priceToPx(currentPrice)}px;"><div class="price-tag-label">${currentPrice.toFixed(2)}</div></div>
     </div>
     <div class="x-axis-scroll" id="xAxisScroll">
-      <div class="x-axis">${xAxisHtml}</div>
+      <div class="x-axis" style="gap:${2 * zoomLevel}px;">${xAxisHtml}</div>
     </div>
     <div class="chart-corner"></div>`;
 
@@ -877,6 +908,19 @@ function renderChart() {
   candlesScroll.addEventListener('scroll', () => {
     xAxisScroll.scrollLeft = candlesScroll.scrollLeft;
   });
+
+  candlesScroll.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const idx = ZOOM_STEPS.indexOf(zoomLevel);
+    if (e.deltaY < 0 && idx < ZOOM_STEPS.length - 1) {
+      zoomLevel = ZOOM_STEPS[idx + 1];
+      renderChart();
+    } else if (e.deltaY > 0 && idx > 0) {
+      zoomLevel = ZOOM_STEPS[idx - 1];
+      renderChart();
+    }
+  }, { passive: false });
 }
 
 // --- WebSocket for 1m real-time ---
