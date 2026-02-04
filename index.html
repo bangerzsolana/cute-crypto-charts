@@ -11,7 +11,7 @@
     --color-page-bg: #1a1a2e;
     --color-active-bg: #0f3460;
     --color-active-border: #4a7cbb;
-    --font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+    --font-family: Impact, sans-serif;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -34,6 +34,15 @@
   .logo img {
     height: 100%;
     width: auto;
+  }
+  @media (max-width: 600px) {
+    .logo {
+      position: static;
+      display: flex;
+      justify-content: center;
+      margin-bottom: 8px;
+      height: 6vh;
+    }
   }
   h1 { font-size: 1.5rem; margin-bottom: 8px; color: var(--color-text); flex-shrink: 0; }
   .subtitle { color: var(--color-text); opacity: 0.6; font-size: 0.85rem; margin-bottom: 8px; flex-shrink: 0; }
@@ -138,15 +147,15 @@
   }
   .timeframe-btns button {
     padding: 8px 16px;
-    border: 1px solid #333;
+    border: 1px solid var(--color-text);
     border-radius: 8px;
-    background: var(--color-chart-bg);
+    background: transparent;
     color: var(--color-text);
     cursor: pointer;
     font-size: 0.9rem;
     transition: background 0.2s, border-color 0.2s;
   }
-  .timeframe-btns button:hover { background: #1a1a4e; }
+  .timeframe-btns button:hover { background: rgba(255,255,255,0.05); }
   .timeframe-btns button.active {
     background: var(--color-active-bg);
     border-color: var(--color-active-border);
@@ -202,30 +211,23 @@
   }
   .price-tag {
     position: absolute;
-    left: 60px;
+    left: 0;
+    right: 0;
     transform: translateY(50%);
-    display: flex;
-    align-items: center;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: bold;
     color: var(--color-page-bg);
-    opacity: 1;
     pointer-events: none;
     white-space: nowrap;
-  }
-  .price-tag-arrow {
-    width: 0;
-    height: 0;
-    border-top: 10px solid transparent;
-    border-bottom: 10px solid transparent;
-    border-right: 8px solid var(--color-text);
-    flex-shrink: 0;
+    z-index: 1;
   }
   .price-tag-label {
     background: var(--color-text);
-    padding: 2px 8px 2px 4px;
-    border-radius: 0 4px 4px 0;
+    padding: 2px 8px;
+    border-radius: 4px;
     line-height: 20px;
+    display: block;
+    text-align: left;
   }
   .x-axis-scroll {
     grid-column: 1;
@@ -328,14 +330,14 @@
   <div class="color-picker">
     <label>Font</label>
     <select id="fontPicker">
-      <option value="'Comic Sans MS', 'Comic Sans', cursive" selected>Comic Sans</option>
+      <option value="Impact, sans-serif" selected>Impact</option>
+      <option value="'Comic Sans MS', 'Comic Sans', cursive">Comic Sans</option>
       <option value="'Segoe UI', system-ui, sans-serif">Segoe UI</option>
       <option value="Georgia, serif">Georgia</option>
       <option value="'Courier New', monospace">Courier New</option>
       <option value="Arial, Helvetica, sans-serif">Arial</option>
       <option value="'Times New Roman', serif">Times New Roman</option>
       <option value="Verdana, sans-serif">Verdana</option>
-      <option value="Impact, sans-serif">Impact</option>
     </select>
   </div>
 </div>
@@ -693,7 +695,7 @@ function renderChart() {
     </div>
     <div class="y-axis" style="height:${CHART_HEIGHT}px;">
       ${yAxisHtml}
-      <div class="price-tag" style="bottom:${priceToPx(currentPrice)}px;"><div class="price-tag-arrow"></div><div class="price-tag-label">${currentPrice.toFixed(2)}</div></div>
+      <div class="price-tag" style="bottom:${priceToPx(currentPrice)}px;"><div class="price-tag-label">${currentPrice.toFixed(2)}</div></div>
     </div>
     <div class="x-axis-scroll" id="xAxisScroll">
       <div class="x-axis">${xAxisHtml}</div>
