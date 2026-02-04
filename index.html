@@ -433,6 +433,7 @@ document.querySelectorAll('.timeframe-btns button').forEach(btn => {
     document.querySelector('.timeframe-btns .active').classList.remove('active');
     btn.classList.add('active');
     currentInterval = btn.dataset.interval;
+    closeWebSocket();
     fetchAndRender();
   });
 });
@@ -440,10 +441,13 @@ document.querySelectorAll('.timeframe-btns button').forEach(btn => {
 // --- Chart ---
 let candles = [];
 
-async function fetchCandles() {
+// Binance interval -> Kraken interval (minutes)
+const KRAKEN_INTERVALS = { '1m': 1, '30m': 30, '1d': 1440 };
+
+async function fetchFromBinance() {
   const url = `https://api.binance.com/api/v3/klines?symbol=${SYMBOL}&interval=${currentInterval}&limit=${LIMIT}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
   const data = await res.json();
   return data.map(k => ({
     time: k[0],
@@ -452,6 +456,34 @@ async function fetchCandles() {
     low: parseFloat(k[3]),
     close: parseFloat(k[4]),
   }));
+}
+
+async function fetchFromKraken() {
+  const interval = KRAKEN_INTERVALS[currentInterval];
+  const url = `https://api.kraken.com/0/public/OHLC?pair=SOLUSDT&interval=${interval}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Kraken API error: ${res.status}`);
+  const data = await res.json();
+  if (data.error && data.error.length) throw new Error(data.error[0]);
+  const key = Object.keys(data.result).find(k => k !== 'last');
+  const rows = data.result[key];
+  // Kraken returns: [time, open, high, low, close, vwap, volume, count]
+  // Take last LIMIT entries
+  return rows.slice(-LIMIT).map(k => ({
+    time: k[0] * 1000,
+    open: parseFloat(k[1]),
+    high: parseFloat(k[2]),
+    low: parseFloat(k[3]),
+    close: parseFloat(k[4]),
+  }));
+}
+
+async function fetchCandles() {
+  try {
+    return await fetchFromBinance();
+  } catch (e) {
+    return await fetchFromKraken();
+  }
 }
 
 function formatTime(ts) {
@@ -550,12 +582,119 @@ function renderChart() {
   });
 }
 
+// --- WebSocket for 1m real-time ---
+let ws = null;
+
+function closeWebSocket() {
+  if (ws) {
+    ws.onclose = null;
+    ws.close();
+    ws = null;
+  }
+}
+
+function connectBinanceWs() {
+  return new Promise((resolve, reject) => {
+    const sock = new WebSocket('wss://stream.binance.com:9443/ws/solusdt@kline_1m');
+    const timeout = setTimeout(() => { sock.close(); reject(new Error('timeout')); }, 5000);
+    sock.onopen = () => { clearTimeout(timeout); resolve(sock); };
+    sock.onerror = () => { clearTimeout(timeout); reject(new Error('binance ws failed')); };
+  });
+}
+
+function connectKrakenWs() {
+  return new Promise((resolve, reject) => {
+    const sock = new WebSocket('wss://ws.kraken.com/v2');
+    const timeout = setTimeout(() => { sock.close(); reject(new Error('timeout')); }, 5000);
+    sock.onopen = () => {
+      clearTimeout(timeout);
+      sock.send(JSON.stringify({
+        method: 'subscribe',
+        params: { channel: 'ohlc', symbol: ['SOL/USDT'], interval: 1 }
+      }));
+      resolve(sock);
+    };
+    sock.onerror = () => { clearTimeout(timeout); reject(new Error('kraken ws failed')); };
+  });
+}
+
+function handleBinanceMessage(evt) {
+  const msg = JSON.parse(evt.data);
+  if (!msg.k) return;
+  const k = msg.k;
+  const updatedCandle = {
+    time: k.t,
+    open: parseFloat(k.o),
+    high: parseFloat(k.h),
+    low: parseFloat(k.l),
+    close: parseFloat(k.c),
+  };
+  applyRealtimeCandle(updatedCandle, k.x);
+}
+
+function handleKrakenMessage(evt) {
+  const msg = JSON.parse(evt.data);
+  if (msg.channel !== 'ohlc' || !msg.data || !msg.data.length) return;
+  const k = msg.data[0];
+  const updatedCandle = {
+    time: new Date(k.timestamp).getTime(),
+    open: parseFloat(k.open),
+    high: parseFloat(k.high),
+    low: parseFloat(k.low),
+    close: parseFloat(k.close),
+  };
+  // Kraken doesn't flag candle close; detect by comparing timestamps
+  const isNewCandle = candles.length > 0 &&
+    Math.floor(updatedCandle.time / 60000) !== Math.floor(candles[candles.length - 1].time / 60000);
+  applyRealtimeCandle(updatedCandle, isNewCandle);
+}
+
+function applyRealtimeCandle(updatedCandle, isClosed) {
+  if (!candles.length) return;
+  const last = candles[candles.length - 1];
+  const lastMinute = Math.floor(last.time / 60000);
+  const updMinute = Math.floor(updatedCandle.time / 60000);
+
+  if (updMinute === lastMinute) {
+    // Update current candle
+    candles[candles.length - 1] = updatedCandle;
+  } else {
+    // New candle started — push it, drop oldest to keep LIMIT
+    if (isClosed || updMinute > lastMinute) {
+      candles.push(updatedCandle);
+      if (candles.length > LIMIT) candles.shift();
+    }
+  }
+  renderChart();
+}
+
+async function startWebSocket() {
+  closeWebSocket();
+  if (currentInterval !== '1m') return;
+
+  try {
+    ws = await connectBinanceWs();
+    ws.onmessage = handleBinanceMessage;
+    ws.onclose = () => { setTimeout(startWebSocket, 3000); };
+  } catch (e) {
+    try {
+      ws = await connectKrakenWs();
+      ws.onmessage = handleKrakenMessage;
+      ws.onclose = () => { setTimeout(startWebSocket, 3000); };
+    } catch (e2) {
+      // Both failed — retry after a delay
+      setTimeout(startWebSocket, 5000);
+    }
+  }
+}
+
 async function fetchAndRender() {
   chartEl.className = 'loading';
   chartEl.innerHTML = 'Loading...';
   try {
     candles = await fetchCandles();
     renderChart();
+    startWebSocket();
   } catch (e) {
     chartEl.className = 'loading';
     chartEl.innerHTML = `<span class="error">Failed to load data: ${e.message}</span>`;
