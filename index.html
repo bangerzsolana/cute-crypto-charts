@@ -38,6 +38,7 @@
     flex-direction: column;
     align-items: center;
     padding: 20px;
+    padding-bottom: 150px;
     overflow: hidden;
   }
   .logo {
@@ -64,12 +65,14 @@
   .customize-panel {
     background: var(--color-chart-bg);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
-    margin-top: 12px;
-    flex-shrink: 0;
-    overflow: hidden;
+    border-radius: 12px 12px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
     width: 100%;
-    max-width: 700px;
+    max-width: 1100px;
+    z-index: 50;
   }
   .customize-header {
     display: flex;
@@ -133,7 +136,7 @@
   .emoji-popup {
     display: none;
     position: absolute;
-    top: 100%;
+    bottom: 100%;
     left: 0;
     z-index: 100;
     background: var(--color-chart-bg);
@@ -144,6 +147,7 @@
     max-height: 220px;
     overflow-y: auto;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    margin-bottom: 4px;
   }
   .emoji-popup.open { display: flex; flex-wrap: wrap; gap: 2px; }
   @media (max-width: 600px) {
@@ -227,6 +231,7 @@
     background: transparent;
     color: var(--color-text);
     cursor: pointer;
+    font-family: var(--font-family);
     font-size: 0.9rem;
     transition: background 0.2s, border-color 0.2s;
   }
@@ -357,9 +362,26 @@
   .x-label-cell {
     min-width: 22px;
     text-align: center;
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     color: var(--color-text);
     opacity: 0.5;
+  }
+  .coin-select {
+    background: transparent;
+    border: 1px solid var(--color-text);
+    border-radius: 8px;
+    color: var(--color-text);
+    font-family: var(--font-family);
+    font-size: 0.9rem;
+    padding: 8px 16px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+  }
+  .coin-select option {
+    background: var(--color-chart-bg);
+    color: var(--color-text);
   }
   .loading {
     display: flex;
@@ -385,7 +407,11 @@
     <button data-interval="30m">30m</button>
     <button data-interval="1d">1d</button>
   </div>
-  <p class="subtitle" id="sourceLabel">SOL / USDT &mdash; Binance</p>
+  <select id="coinPicker" class="coin-select">
+    <option value="SOL" selected>SOL / USDT ▲</option>
+    <option value="BTC">BTC / USDT</option>
+    <option value="ETH">ETH / USDT</option>
+  </select>
 </div>
 
 <div class="chart-container">
@@ -441,7 +467,12 @@
 </div>
 
 <script>
-const SYMBOL = 'SOLUSDT';
+const COINS = {
+  SOL: { binance: 'SOLUSDT', kraken: 'SOLUSDT', krakenWs: 'SOL/USDT', label: 'SOL / USDT' },
+  BTC: { binance: 'BTCUSDT', kraken: 'XBTUSDT', krakenWs: 'BTC/USDT', label: 'BTC / USDT' },
+  ETH: { binance: 'ETHUSDT', kraken: 'ETHUSDT', krakenWs: 'ETH/USDT', label: 'ETH / USDT' },
+};
+let currentCoin = 'SOL';
 const LIMIT = 50;
 const EMOJI_HEIGHT = 16;
 const Y_TICKS = 8;
@@ -461,6 +492,7 @@ const EMOJI_LIST = [
   '👍','👎','👆','👇','✌️','🤞','🫡','💪','👏','🙌',
   '🐂','🐻','🦁','🐸','🐵','🦄','🐍','🦅','🐳','🐔',
   '✅','❌','⚡','💡','🎯','🎲','🎰','🪙','📊','🧲',
+  '😢','😭','🥺','😿',
 ];
 
 function populatePopup(popupEl, onSelect) {
@@ -611,10 +643,22 @@ document.getElementById('fontPicker').addEventListener('change', e => {
   document.documentElement.style.setProperty('--font-family', e.target.value);
 });
 
+// --- Customize Panel Toggle ---
+document.getElementById('customizeHeader').addEventListener('click', () => {
+  document.getElementById('customizePanel').classList.toggle('collapsed');
+});
+
+// --- Coin picker ---
+document.getElementById('coinPicker').addEventListener('change', e => {
+  currentCoin = e.target.value;
+  closeWebSocket();
+  fetchAndRender();
+});
+
 // --- Timeframe buttons ---
-document.querySelectorAll('.timeframe-btns button').forEach(btn => {
+document.querySelectorAll('[data-interval]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelector('.timeframe-btns .active').classList.remove('active');
+    document.querySelectorAll('[data-interval]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentInterval = btn.dataset.interval;
     closeWebSocket();
@@ -626,15 +670,13 @@ document.querySelectorAll('.timeframe-btns button').forEach(btn => {
 let candles = [];
 let dataSource = 'Binance';
 
-function updateSourceLabel() {
-  document.getElementById('sourceLabel').textContent = `SOL / USDT — ${dataSource}`;
-}
+function updateSourceLabel() {}
 
 // Binance interval -> Kraken interval (minutes)
 const KRAKEN_INTERVALS = { '1m': 1, '30m': 30, '1d': 1440 };
 
 async function fetchFromBinance() {
-  const url = `https://api.binance.com/api/v3/klines?symbol=${SYMBOL}&interval=${currentInterval}&limit=${LIMIT}`;
+  const url = `https://api.binance.com/api/v3/klines?symbol=${COINS[currentCoin].binance}&interval=${currentInterval}&limit=${LIMIT}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
   const data = await res.json();
@@ -649,7 +691,7 @@ async function fetchFromBinance() {
 
 async function fetchFromKraken() {
   const interval = KRAKEN_INTERVALS[currentInterval];
-  const url = `https://api.kraken.com/0/public/OHLC?pair=SOLUSDT&interval=${interval}`;
+  const url = `https://api.kraken.com/0/public/OHLC?pair=${COINS[currentCoin].kraken}&interval=${interval}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Kraken API error: ${res.status}`);
   const data = await res.json();
@@ -700,12 +742,17 @@ function shouldShowLabel(ts, idx) {
   }
 }
 
+let savedChartHeight = null;
+window.addEventListener('resize', () => { savedChartHeight = null; renderChart(); });
+
 function renderChart() {
   if (!candles.length) return;
 
-  // Dynamic chart height based on available space
   const container = document.querySelector('.chart-container');
-  const CHART_HEIGHT = Math.max(200, container.clientHeight - 80);
+  if (!savedChartHeight) {
+    savedChartHeight = Math.max(200, container.clientHeight - 80);
+  }
+  const CHART_HEIGHT = savedChartHeight;
 
   const allHighs = candles.map(c => c.high);
   const allLows = candles.map(c => c.low);
@@ -811,7 +858,7 @@ function closeWebSocket() {
 
 function connectBinanceWs() {
   return new Promise((resolve, reject) => {
-    const sock = new WebSocket('wss://stream.binance.com:9443/ws/solusdt@kline_1m');
+    const sock = new WebSocket(`wss://stream.binance.com:9443/ws/${COINS[currentCoin].binance.toLowerCase()}@kline_1m`);
     const timeout = setTimeout(() => { sock.close(); reject(new Error('timeout')); }, 5000);
     sock.onopen = () => { clearTimeout(timeout); resolve(sock); };
     sock.onerror = () => { clearTimeout(timeout); reject(new Error('binance ws failed')); };
@@ -826,7 +873,7 @@ function connectKrakenWs() {
       clearTimeout(timeout);
       sock.send(JSON.stringify({
         method: 'subscribe',
-        params: { channel: 'ohlc', symbol: ['SOL/USDT'], interval: 1 }
+        params: { channel: 'ohlc', symbol: [COINS[currentCoin].krakenWs], interval: 1 }
       }));
       resolve(sock);
     };
