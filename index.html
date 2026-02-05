@@ -418,6 +418,76 @@
     font-size: 1rem;
   }
   .error { color: #e94560; }
+  .delulu-toggle {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 10;
+  }
+  .delulu-toggle label {
+    font-size: 0.85rem;
+    color: var(--color-text);
+    cursor: pointer;
+    user-select: none;
+  }
+  .delulu-switch {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 13px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  .delulu-switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: var(--color-text);
+    border-radius: 50%;
+    transition: transform 0.3s;
+  }
+  @keyframes rainbow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .delulu-switch.active {
+    background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
+    background-size: 400% 400%;
+    animation: rainbow 2s ease infinite;
+  }
+  .delulu-switch.active::after {
+    transform: translateX(22px);
+  }
+  .delulu-active .logo svg {
+    animation: rainbow-text 2s ease infinite;
+  }
+  @keyframes rainbow-text {
+    0% { color: #ff0000; }
+    14% { color: #ff7f00; }
+    28% { color: #ffff00; }
+    42% { color: #00ff00; }
+    57% { color: #0000ff; }
+    71% { color: #4b0082; }
+    85% { color: #9400d3; }
+    100% { color: #ff0000; }
+  }
+  @media (max-width: 600px) {
+    .delulu-toggle {
+      top: 8px;
+      right: 8px;
+    }
+    .delulu-toggle label {
+      font-size: 0.75rem;
+    }
+  }
 </style>
 </head>
 <body>
@@ -435,6 +505,11 @@
       </clipPath>
     </defs>
   </svg>
+</div>
+
+<div class="delulu-toggle">
+  <label for="deluluSwitch">DeLuLu</label>
+  <div class="delulu-switch" id="deluluSwitch"></div>
 </div>
 
 <div class="bottom-bar">
@@ -513,6 +588,7 @@ const COINS = {
   ETH: { binance: 'ETHUSDT', kraken: 'ETHUSDT', krakenWs: 'ETH/USDT', label: 'ETH / USDT' },
 };
 let currentCoin = 'SOL';
+let deluluMode = false;
 const LIMIT = 200;
 const EMOJI_HEIGHT = 16;
 const Y_TICKS = 8;
@@ -707,6 +783,14 @@ document.getElementById('customizeHeader').addEventListener('click', () => {
 // Set initial padding based on actual panel size
 syncPanelPadding();
 
+// --- DeLuLu Toggle ---
+document.getElementById('deluluSwitch').addEventListener('click', () => {
+  deluluMode = !deluluMode;
+  document.getElementById('deluluSwitch').classList.toggle('active', deluluMode);
+  document.body.classList.toggle('delulu-active', deluluMode);
+  renderChart();
+});
+
 // --- Coin picker ---
 function applyCoinEmoji() {
   if (currentCoin === 'ETH') {
@@ -899,6 +983,11 @@ function renderChart() {
   const priceRange = priceMax - priceLow;
 
   const priceToPx = (p) => ((p - priceLow) / priceRange) * SCALED_HEIGHT;
+  // In DeLuLu mode, flip candle positions vertically
+  const candlePriceToPx = (p) => {
+    const px = priceToPx(p);
+    return deluluMode ? (SCALED_HEIGHT - px) : px;
+  };
 
   const bodySizes = candles.map(c => Math.abs(c.close - c.open));
   // Use median body size for scaling so outliers don't shrink everything
@@ -922,18 +1011,26 @@ function renderChart() {
   let xAxisHtml = '';
   candles.forEach((c, idx) => {
     const isUp = c.close >= c.open;
-    const emoji = isUp ? upEmoji : downEmoji;
+    // In DeLuLu mode, flip the emoji so drops look like pumps
+    const visuallyUp = deluluMode ? !isUp : isUp;
+    const emoji = visuallyUp ? upEmoji : downEmoji;
     const bodySize = Math.abs(c.close - c.open);
     const emojiCount = Math.max(MIN_EMOJIS, Math.round((bodySize / maxBody) * MAX_EMOJIS));
 
-    const bodyTop = priceToPx(Math.max(c.open, c.close));
-    const bodyBottom = priceToPx(Math.min(c.open, c.close));
-    const highPx = priceToPx(c.high);
-    const lowPx = priceToPx(c.low);
+    const bodyTopPx = candlePriceToPx(Math.max(c.open, c.close));
+    const bodyBottomPx = candlePriceToPx(Math.min(c.open, c.close));
+    const highPx = candlePriceToPx(c.high);
+    const lowPx = candlePriceToPx(c.low);
 
-    const upperWick = highPx - bodyTop;
-    const lowerWick = bodyBottom - lowPx;
-    const bottomOffset = lowPx;
+    // In DeLuLu mode positions are inverted, so recalculate which is top/bottom
+    const actualTop = Math.max(bodyTopPx, bodyBottomPx, highPx, lowPx);
+    const actualBottom = Math.min(bodyTopPx, bodyBottomPx, highPx, lowPx);
+    const bodyHigh = Math.max(bodyTopPx, bodyBottomPx);
+    const bodyLow = Math.min(bodyTopPx, bodyBottomPx);
+
+    const upperWick = actualTop - bodyHigh;
+    const lowerWick = bodyLow - actualBottom;
+    const bottomOffset = actualBottom;
 
     let emojis = '';
     const emojiFontSize = 14 * zoomLevel;
@@ -957,6 +1054,8 @@ function renderChart() {
   });
 
   const currentPrice = candles[candles.length - 1].close;
+  // In DeLuLu mode, mirror price around midpoint so tag matches Y-axis position
+  const displayPrice = deluluMode ? (priceMax + priceLow - currentPrice) : currentPrice;
 
   chartEl.className = 'chart-grid';
   chartEl.innerHTML = `
@@ -966,7 +1065,7 @@ function renderChart() {
     <div class="y-axis">
       <div class="y-axis-inner" style="height:${SCALED_HEIGHT}px;">
         ${yAxisHtml}
-        <div class="price-tag" style="bottom:${priceToPx(currentPrice)}px;"><div class="price-tag-label">${currentPrice.toFixed(2)}</div></div>
+        <div class="price-tag" style="bottom:${candlePriceToPx(currentPrice)}px;"><div class="price-tag-label">${displayPrice.toFixed(2)}</div></div>
       </div>
     </div>
     <div class="x-axis-scroll" id="xAxisScroll">
