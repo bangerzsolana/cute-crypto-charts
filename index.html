@@ -271,7 +271,7 @@
     grid-column: 1;
     grid-row: 1;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
     border-right: 1px solid #333;
     border-bottom: 1px solid #333;
   }
@@ -285,14 +285,17 @@
   .y-axis {
     grid-column: 2;
     grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+    overflow: hidden;
     padding-left: 6px;
     text-align: left;
     font-size: 0.75rem;
     color: var(--color-text);
     opacity: 0.6;
+  }
+  .y-axis-inner {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
     position: relative;
   }
   .price-tag {
@@ -437,9 +440,8 @@
     <button class="active" data-interval="1m">1m</button>
     <button data-interval="30m">30m</button>
     <button data-interval="1d">1d</button>
-    <span class="zoom-separator">|</span>
-    <button id="zoomOut" title="Zoom out">−</button>
-    <button id="zoomIn" title="Zoom in">+</button>
+    <button id="zoomOut" style="display:none;">−</button>
+    <button id="zoomIn" style="display:none;">+</button>
   </div>
   <div class="coin-select-wrap">
     <select id="coinPicker" class="coin-select">
@@ -723,20 +725,39 @@ document.querySelectorAll('[data-interval]').forEach(btn => {
   });
 });
 
-// --- Zoom controls ---
+// --- Zoom controls (focal-point: center of visible area) ---
+function buttonZoom(newZoom) {
+  const candlesScroll = document.getElementById('candlesScroll');
+  if (!candlesScroll) return;
+
+  const oldZoom = zoomLevel;
+  const centerX = candlesScroll.clientWidth / 2;
+  const centerY = candlesScroll.clientHeight / 2;
+
+  const contentX = candlesScroll.scrollLeft + centerX;
+  const contentY = candlesScroll.scrollTop + centerY;
+  const ratioX = candlesScroll.scrollWidth > 0 ? contentX / candlesScroll.scrollWidth : 0;
+  const ratioY = candlesScroll.scrollHeight > 0 ? contentY / candlesScroll.scrollHeight : 0;
+
+  const zoomRatio = newZoom / oldZoom;
+  const newContentWidth = candlesScroll.scrollWidth * zoomRatio;
+  const newContentHeight = candlesScroll.scrollHeight * zoomRatio;
+
+  zoomLevel = newZoom;
+  pendingScrollRestore = {
+    scrollLeft: ratioX * newContentWidth - centerX,
+    scrollTop: ratioY * newContentHeight - centerY,
+  };
+  renderChart();
+}
+
 document.getElementById('zoomIn').addEventListener('click', () => {
   const next = ZOOM_STEPS.find(s => s > zoomLevel);
-  if (next !== undefined) {
-    zoomLevel = next;
-    renderChart();
-  }
+  if (next !== undefined) buttonZoom(next);
 });
 document.getElementById('zoomOut').addEventListener('click', () => {
   const prev = [...ZOOM_STEPS].reverse().find(s => s < zoomLevel);
-  if (prev !== undefined) {
-    zoomLevel = prev;
-    renderChart();
-  }
+  if (prev !== undefined) buttonZoom(prev);
 });
 
 // --- Gesture zoom RAF throttle ---
@@ -752,6 +773,12 @@ function scheduleRender() {
 // --- Touch pinch-to-zoom state ---
 let touchStartDist = null;
 let touchStartZoom = null;
+let touchMidX = 0;
+let touchMidY = 0;
+let touchScrollLeft = 0;
+let touchScrollTop = 0;
+let touchContentWidth = 0;
+let touchContentHeight = 0;
 
 // --- Chart ---
 let candles = [];
@@ -832,6 +859,9 @@ function shouldShowLabel(ts, idx) {
 let savedChartHeight = null;
 window.addEventListener('resize', () => { savedChartHeight = null; renderChart(); });
 
+// Pending scroll restoration after render (set by focal-point zoom)
+let pendingScrollRestore = null;
+
 function renderChart() {
   if (!candles.length) return;
 
@@ -840,6 +870,7 @@ function renderChart() {
     savedChartHeight = Math.max(200, container.clientHeight - 80);
   }
   const CHART_HEIGHT = savedChartHeight;
+  const SCALED_HEIGHT = CHART_HEIGHT * zoomLevel;
 
   const allHighs = candles.map(c => c.high);
   const allLows = candles.map(c => c.low);
@@ -852,7 +883,7 @@ function renderChart() {
   const priceLow = rawMin - padding;
   const priceRange = priceMax - priceLow;
 
-  const priceToPx = (p) => ((p - priceLow) / priceRange) * CHART_HEIGHT;
+  const priceToPx = (p) => ((p - priceLow) / priceRange) * SCALED_HEIGHT;
 
   const bodySizes = candles.map(c => Math.abs(c.close - c.open));
   // Use median body size for scaling so outliers don't shrink everything
@@ -914,11 +945,13 @@ function renderChart() {
   chartEl.className = 'chart-grid';
   chartEl.innerHTML = `
     <div class="candles-scroll" id="candlesScroll">
-      <div class="candles-area" style="height:${CHART_HEIGHT}px;gap:${2 * zoomLevel}px;">${candlesHtml}</div>
+      <div class="candles-area" style="height:${SCALED_HEIGHT}px;gap:${2 * zoomLevel}px;">${candlesHtml}</div>
     </div>
-    <div class="y-axis" style="height:${CHART_HEIGHT}px;">
-      ${yAxisHtml}
-      <div class="price-tag" style="bottom:${priceToPx(currentPrice)}px;"><div class="price-tag-label">${currentPrice.toFixed(2)}</div></div>
+    <div class="y-axis">
+      <div class="y-axis-inner" style="height:${SCALED_HEIGHT}px;">
+        ${yAxisHtml}
+        <div class="price-tag" style="bottom:${priceToPx(currentPrice)}px;"><div class="price-tag-label">${currentPrice.toFixed(2)}</div></div>
+      </div>
     </div>
     <div class="x-axis-scroll" id="xAxisScroll">
       <div class="x-axis" style="gap:${2 * zoomLevel}px;">${xAxisHtml}</div>
@@ -927,28 +960,82 @@ function renderChart() {
 
   const candlesScroll = document.getElementById('candlesScroll');
   const xAxisScroll = document.getElementById('xAxisScroll');
-  candlesScroll.scrollLeft = candlesScroll.scrollWidth;
+  const yAxisInner = document.querySelector('.y-axis-inner');
+
+  // Scroll restoration
+  if (pendingScrollRestore) {
+    candlesScroll.scrollLeft = pendingScrollRestore.scrollLeft;
+    candlesScroll.scrollTop = pendingScrollRestore.scrollTop;
+    pendingScrollRestore = null;
+  } else {
+    // Default: scroll to right edge, center vertically
+    candlesScroll.scrollLeft = candlesScroll.scrollWidth;
+    const maxScrollTop = candlesScroll.scrollHeight - candlesScroll.clientHeight;
+    candlesScroll.scrollTop = maxScrollTop > 0 ? maxScrollTop / 2 : 0;
+  }
   xAxisScroll.scrollLeft = candlesScroll.scrollLeft;
+  yAxisInner.style.transform = `translateY(-${candlesScroll.scrollTop}px)`;
 
   candlesScroll.addEventListener('scroll', () => {
     xAxisScroll.scrollLeft = candlesScroll.scrollLeft;
+    yAxisInner.style.transform = `translateY(-${candlesScroll.scrollTop}px)`;
   });
 
-  // Continuous wheel/trackpad zoom
+  // Continuous wheel/trackpad zoom with focal point
   candlesScroll.addEventListener('wheel', (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    zoomLevel = Math.min(3, Math.max(0.25, zoomLevel * (1 - e.deltaY * 0.01)));
+
+    const oldZoom = zoomLevel;
+    const newZoom = Math.min(3, Math.max(0.25, zoomLevel * (1 - e.deltaY * 0.01)));
+    if (newZoom === oldZoom) return;
+
+    // Cursor position relative to scroll container viewport
+    const rect = candlesScroll.getBoundingClientRect();
+    const cursorX = e.clientX - rect.left;
+    const cursorY = e.clientY - rect.top;
+
+    // Content-space coordinate under cursor
+    const contentX = candlesScroll.scrollLeft + cursorX;
+    const contentY = candlesScroll.scrollTop + cursorY;
+
+    // Ratio within old content
+    const oldContentWidth = candlesScroll.scrollWidth;
+    const oldContentHeight = candlesScroll.scrollHeight;
+    const ratioX = oldContentWidth > 0 ? contentX / oldContentWidth : 0;
+    const ratioY = oldContentHeight > 0 ? contentY / oldContentHeight : 0;
+
+    zoomLevel = newZoom;
+
+    // Estimate new content dimensions based on zoom ratio
+    const zoomRatio = newZoom / oldZoom;
+    const newContentWidth = oldContentWidth * zoomRatio;
+    const newContentHeight = oldContentHeight * zoomRatio;
+
+    pendingScrollRestore = {
+      scrollLeft: ratioX * newContentWidth - cursorX,
+      scrollTop: ratioY * newContentHeight - cursorY,
+    };
+
     scheduleRender();
   }, { passive: false });
 
-  // Touch pinch-to-zoom
+  // Touch pinch-to-zoom with focal point
   candlesScroll.addEventListener('touchstart', (e) => {
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       touchStartDist = Math.hypot(dx, dy);
       touchStartZoom = zoomLevel;
+
+      // Record midpoint and scroll state
+      const rect = candlesScroll.getBoundingClientRect();
+      touchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      touchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      touchScrollLeft = candlesScroll.scrollLeft;
+      touchScrollTop = candlesScroll.scrollTop;
+      touchContentWidth = candlesScroll.scrollWidth;
+      touchContentHeight = candlesScroll.scrollHeight;
     }
   });
   candlesScroll.addEventListener('touchmove', (e) => {
@@ -957,7 +1044,29 @@ function renderChart() {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
-      zoomLevel = Math.min(3, Math.max(0.25, touchStartZoom * (dist / touchStartDist)));
+      const newZoom = Math.min(3, Math.max(0.25, touchStartZoom * (dist / touchStartDist)));
+      if (newZoom === zoomLevel) return;
+
+      // Content coordinate under original midpoint
+      const contentX = touchScrollLeft + touchMidX;
+      const contentY = touchScrollTop + touchMidY;
+      const ratioX = touchContentWidth > 0 ? contentX / touchContentWidth : 0;
+      const ratioY = touchContentHeight > 0 ? contentY / touchContentHeight : 0;
+
+      const zoomRatio = newZoom / touchStartZoom;
+      const newContentWidth = touchContentWidth * zoomRatio;
+      const newContentHeight = touchContentHeight * zoomRatio;
+
+      // Current midpoint (fingers may have moved)
+      const rect = candlesScroll.getBoundingClientRect();
+      const curMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const curMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+      zoomLevel = newZoom;
+      pendingScrollRestore = {
+        scrollLeft: ratioX * newContentWidth - curMidX,
+        scrollTop: ratioY * newContentHeight - curMidY,
+      };
       scheduleRender();
     }
   }, { passive: false });
