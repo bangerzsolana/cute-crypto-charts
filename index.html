@@ -691,7 +691,7 @@ document.getElementById('fontPicker').addEventListener('change', e => {
 function syncPanelPadding() {
   requestAnimationFrame(() => {
     const panel = document.getElementById('customizePanel');
-    document.body.style.paddingBottom = (panel.offsetHeight + 16) + 'px';
+    document.body.style.paddingBottom = (panel.offsetHeight + 28) + 'px';
     savedChartHeight = null;
     renderChart();
   });
