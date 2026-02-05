@@ -517,7 +517,7 @@ const Y_TICKS = 8;
 
 let currentInterval = '1m';
 let zoomLevel = 1;
-const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3];
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3];
 let upEmoji = '😊';
 let downEmoji = '😡';
 let savedUpEmoji = upEmoji;
@@ -870,7 +870,7 @@ function renderChart() {
     savedChartHeight = Math.max(200, container.clientHeight - 80);
   }
   const CHART_HEIGHT = savedChartHeight;
-  const SCALED_HEIGHT = CHART_HEIGHT * zoomLevel;
+  const SCALED_HEIGHT = CHART_HEIGHT * Math.max(zoomLevel, 1);
 
   const allHighs = candles.map(c => c.high);
   const allLows = candles.map(c => c.low);
@@ -893,10 +893,11 @@ function renderChart() {
   const MIN_EMOJIS = currentInterval === '1m' ? 3 : 1;
   const MAX_EMOJIS = 10;
 
-  // Y-axis labels snapped to 0.1 intervals
+  // Y-axis labels snapped to 0.1 intervals — more ticks when zoomed in
+  const effectiveTicks = Math.round(Y_TICKS * Math.max(zoomLevel, 1));
   const tickStart = Math.ceil(priceLow * 10) / 10;
   const tickEnd = Math.floor(priceMax * 10) / 10;
-  const tickStep = Math.max(0.1, Math.round(((tickEnd - tickStart) / (Y_TICKS - 1)) * 10) / 10);
+  const tickStep = Math.max(0.1, Math.round(((tickEnd - tickStart) / (effectiveTicks - 1)) * 10) / 10);
   let yAxisHtml = '';
   for (let p = tickEnd; p >= tickStart - 0.001; p -= tickStep) {
     yAxisHtml += `<div>${p.toFixed(1)}</div>`;
@@ -987,7 +988,7 @@ function renderChart() {
     e.preventDefault();
 
     const oldZoom = zoomLevel;
-    const newZoom = Math.min(3, Math.max(0.25, zoomLevel * (1 - e.deltaY * 0.01)));
+    const newZoom = Math.min(3, Math.max(0.5, zoomLevel * (1 - e.deltaY * 0.01)));
     if (newZoom === oldZoom) return;
 
     // Cursor position relative to scroll container viewport
@@ -1044,7 +1045,7 @@ function renderChart() {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
-      const newZoom = Math.min(3, Math.max(0.25, touchStartZoom * (dist / touchStartDist)));
+      const newZoom = Math.min(3, Math.max(0.5, touchStartZoom * (dist / touchStartDist)));
       if (newZoom === zoomLevel) return;
 
       // Content coordinate under original midpoint
