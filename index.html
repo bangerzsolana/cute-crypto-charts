@@ -52,9 +52,6 @@
     width: auto;
   }
   @media (max-width: 600px) {
-    body {
-      padding-bottom: 200px;
-    }
     .logo {
       position: static;
       display: flex;
@@ -691,17 +688,22 @@ document.getElementById('fontPicker').addEventListener('change', e => {
 });
 
 // --- Customize Panel Toggle ---
-document.getElementById('customizeHeader').addEventListener('click', () => {
-  const panel = document.getElementById('customizePanel');
-  panel.classList.toggle('collapsed');
-  // Recalculate chart height to fill freed/lost space
+function syncPanelPadding() {
   requestAnimationFrame(() => {
-    const panelHeight = panel.offsetHeight;
-    document.body.style.paddingBottom = (panelHeight + 16) + 'px';
+    const panel = document.getElementById('customizePanel');
+    document.body.style.paddingBottom = (panel.offsetHeight + 16) + 'px';
     savedChartHeight = null;
     renderChart();
   });
+}
+
+document.getElementById('customizeHeader').addEventListener('click', () => {
+  document.getElementById('customizePanel').classList.toggle('collapsed');
+  syncPanelPadding();
 });
+
+// Set initial padding based on actual panel size
+syncPanelPadding();
 
 // --- Coin picker ---
 function applyCoinEmoji() {
