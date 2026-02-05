@@ -692,7 +692,15 @@ document.getElementById('fontPicker').addEventListener('change', e => {
 
 // --- Customize Panel Toggle ---
 document.getElementById('customizeHeader').addEventListener('click', () => {
-  document.getElementById('customizePanel').classList.toggle('collapsed');
+  const panel = document.getElementById('customizePanel');
+  panel.classList.toggle('collapsed');
+  // Recalculate chart height to fill freed/lost space
+  requestAnimationFrame(() => {
+    const panelHeight = panel.offsetHeight;
+    document.body.style.paddingBottom = (panelHeight + 16) + 'px';
+    savedChartHeight = null;
+    renderChart();
+  });
 });
 
 // --- Coin picker ---
