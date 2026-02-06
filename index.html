@@ -421,7 +421,7 @@
   .delulu-toggle {
     position: absolute;
     top: 16px;
-    right: 16px;
+    right: max(16px, calc(50% - 550px + 20px));
     display: flex;
     align-items: center;
     gap: 8px;
@@ -969,15 +969,17 @@ function renderChart() {
     savedChartHeight = Math.max(200, container.clientHeight - 80);
   }
   const CHART_HEIGHT = savedChartHeight;
-  const SCALED_HEIGHT = CHART_HEIGHT * Math.max(zoomLevel, 1);
+  // Always make content 50% taller than viewport for vertical scroll buffer
+  const SCROLL_BUFFER = 1.5;
+  const SCALED_HEIGHT = CHART_HEIGHT * Math.max(zoomLevel, 1) * SCROLL_BUFFER;
 
   const allHighs = candles.map(c => c.high);
   const allLows = candles.map(c => c.low);
   const rawMax = Math.max(...allHighs);
   const rawMin = Math.min(...allLows);
   const rawRange = rawMax - rawMin || 1;
-  // Add 20% padding above and below so candles sit centered
-  const padding = rawRange * 0.2;
+  // Extend price range to match the scroll buffer so labels fill the extra space
+  const padding = rawRange * ((SCROLL_BUFFER - 1) / 2 + 0.2);
   const priceMax = rawMax + padding;
   const priceLow = rawMin - padding;
   const priceRange = priceMax - priceLow;
@@ -1095,6 +1097,39 @@ function renderChart() {
     xAxisScroll.scrollLeft = candlesScroll.scrollLeft;
     yAxisInner.style.transform = `translateY(-${candlesScroll.scrollTop}px)`;
   });
+
+  // Y-axis touch drag to scroll vertically
+  const yAxis = document.querySelector('.y-axis');
+  let yAxisDragging = false;
+  let yAxisStartY = 0;
+  let yAxisStartScroll = 0;
+  yAxis.addEventListener('touchstart', (e) => {
+    yAxisDragging = true;
+    yAxisStartY = e.touches[0].clientY;
+    yAxisStartScroll = candlesScroll.scrollTop;
+  }, { passive: true });
+  yAxis.addEventListener('touchmove', (e) => {
+    if (!yAxisDragging) return;
+    const deltaY = yAxisStartY - e.touches[0].clientY;
+    candlesScroll.scrollTop = yAxisStartScroll + deltaY;
+  }, { passive: true });
+  yAxis.addEventListener('touchend', () => { yAxisDragging = false; });
+
+  // X-axis touch drag to scroll horizontally
+  let xAxisDragging = false;
+  let xAxisStartX = 0;
+  let xAxisStartScroll = 0;
+  xAxisScroll.addEventListener('touchstart', (e) => {
+    xAxisDragging = true;
+    xAxisStartX = e.touches[0].clientX;
+    xAxisStartScroll = candlesScroll.scrollLeft;
+  }, { passive: true });
+  xAxisScroll.addEventListener('touchmove', (e) => {
+    if (!xAxisDragging) return;
+    const deltaX = xAxisStartX - e.touches[0].clientX;
+    candlesScroll.scrollLeft = xAxisStartScroll + deltaX;
+  }, { passive: true });
+  xAxisScroll.addEventListener('touchend', () => { xAxisDragging = false; });
 
   // Continuous wheel/trackpad zoom with focal point
   candlesScroll.addEventListener('wheel', (e) => {
@@ -1262,6 +1297,15 @@ function applyRealtimeCandle(updatedCandle) {
   const last = candles[candles.length - 1];
   const lastMinute = Math.floor(last.time / 60000);
   const updMinute = Math.floor(updatedCandle.time / 60000);
+
+  // Preserve scroll position so user doesn't get yanked to the front
+  const candlesScroll = document.getElementById('candlesScroll');
+  if (candlesScroll) {
+    pendingScrollRestore = {
+      scrollLeft: candlesScroll.scrollLeft,
+      scrollTop: candlesScroll.scrollTop,
+    };
+  }
 
   if (updMinute === lastMinute) {
     // Update current candle in place
