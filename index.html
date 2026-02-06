@@ -419,13 +419,9 @@
   }
   .error { color: #e94560; }
   .delulu-toggle {
-    position: absolute;
-    top: 16px;
-    right: max(16px, calc(50% - 550px + 20px));
     display: flex;
     align-items: center;
     gap: 8px;
-    z-index: 10;
   }
   .delulu-toggle label {
     font-size: 0.85rem;
@@ -480,10 +476,6 @@
     100% { color: #ff0000; }
   }
   @media (max-width: 600px) {
-    .delulu-toggle {
-      top: 8px;
-      right: 8px;
-    }
     .delulu-toggle label {
       font-size: 0.75rem;
     }
@@ -507,11 +499,6 @@
   </svg>
 </div>
 
-<div class="delulu-toggle">
-  <label for="deluluSwitch">DeLuLu</label>
-  <div class="delulu-switch" id="deluluSwitch"></div>
-</div>
-
 <div class="bottom-bar">
   <div class="timeframe-btns">
     <button class="active" data-interval="1m">1m</button>
@@ -519,6 +506,10 @@
     <button data-interval="1d">1d</button>
     <button id="zoomOut" style="display:none;">−</button>
     <button id="zoomIn" style="display:none;">+</button>
+  </div>
+  <div class="delulu-toggle">
+    <label for="deluluSwitch">DeLuLu</label>
+    <div class="delulu-switch" id="deluluSwitch"></div>
   </div>
   <div class="coin-select-wrap">
     <select id="coinPicker" class="coin-select">
@@ -999,14 +990,31 @@ function renderChart() {
   const MIN_EMOJIS = currentInterval === '1m' ? 3 : 1;
   const MAX_EMOJIS = 10;
 
-  // Y-axis labels snapped to 0.1 intervals — more ticks when zoomed in
+  // Format price for display — use K notation only for BTC-level prices
+  const formatPrice = (p) => {
+    if (p >= 10000) {
+      return (p / 1000).toFixed(1) + 'K';
+    } else if (p >= 1000) {
+      return Math.round(p).toLocaleString();
+    }
+    return p.toFixed(1);
+  };
+
+  // Y-axis labels — more ticks when zoomed in
   const effectiveTicks = Math.round(Y_TICKS * Math.max(zoomLevel, 1));
-  const tickStart = Math.ceil(priceLow * 10) / 10;
-  const tickEnd = Math.floor(priceMax * 10) / 10;
-  const tickStep = Math.max(0.1, Math.round(((tickEnd - tickStart) / (effectiveTicks - 1)) * 10) / 10);
+  const rawStep = priceRange / (effectiveTicks - 1);
+  // Round step to a nice number based on price magnitude
+  let tickStep;
+  if (priceMax >= 10000) {
+    tickStep = Math.max(500, Math.round(rawStep / 500) * 500);
+  } else if (priceMax >= 1000) {
+    tickStep = Math.max(50, Math.round(rawStep / 50) * 50);
+  } else {
+    tickStep = Math.max(0.1, Math.round(rawStep * 10) / 10);
+  }
   let yAxisHtml = '';
-  for (let p = tickEnd; p >= tickStart - 0.001; p -= tickStep) {
-    yAxisHtml += `<div>${p.toFixed(1)}</div>`;
+  for (let p = priceMax; p >= priceLow - 0.001; p -= tickStep) {
+    yAxisHtml += `<div>${formatPrice(p)}</div>`;
   }
 
   let candlesHtml = '';
@@ -1067,7 +1075,7 @@ function renderChart() {
     <div class="y-axis">
       <div class="y-axis-inner" style="height:${SCALED_HEIGHT}px;">
         ${yAxisHtml}
-        <div class="price-tag" style="bottom:${candlePriceToPx(currentPrice)}px;"><div class="price-tag-label">${displayPrice.toFixed(2)}</div></div>
+        <div class="price-tag" style="bottom:${candlePriceToPx(currentPrice)}px;"><div class="price-tag-label">${formatPrice(displayPrice)}</div></div>
       </div>
     </div>
     <div class="x-axis-scroll" id="xAxisScroll">
