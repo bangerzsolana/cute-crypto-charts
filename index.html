@@ -418,6 +418,17 @@
     font-size: 1rem;
   }
   .error { color: #e94560; }
+  .footer-credit {
+    font-size: 0.65rem;
+    color: var(--color-text);
+    opacity: 0.4;
+    text-align: center;
+    max-width: 1100px;
+    width: 100%;
+    padding: 8px 0;
+    word-break: break-all;
+    letter-spacing: 0.1em;
+  }
   .delulu-toggle {
     display: flex;
     align-items: center;
@@ -522,6 +533,10 @@
 
 <div class="chart-container">
   <div id="chart" class="loading">Loading...</div>
+</div>
+
+<div class="footer-credit">
+  Website by Bangerz. Funded by Bags App: G3gpLJVta6TY7UQS7dFHysm2jysDwhEJa2WHDW1rBAGS
 </div>
 
 <div class="customize-panel" id="customizePanel">
@@ -973,8 +988,10 @@ function renderChart() {
   const rawRange = rawMax - rawMin || 1;
 
   // Calculate DeLuLu boost first so we can extend the Y-axis range
+  // DeLuLu is disabled for ETH
+  const deluluActive = deluluMode && currentCoin !== 'ETH';
   let deluluBoost = 0;
-  if (deluluMode) {
+  if (deluluActive) {
     const currentPrice = candles[candles.length - 1].close;
     // Check if natural range gives at least 20% gain appearance
     const priceMid = (rawMax + rawMin) / 2;
@@ -986,9 +1003,10 @@ function renderChart() {
     }
   }
 
-  // Extend price range - include boosted prices in DeLuLu mode
+  // Extend price range - include boosted prices in DeLuLu mode with extra padding at top
   const padding = rawRange * ((SCROLL_BUFFER - 1) / 2 + 0.2);
-  const priceMax = (deluluMode ? rawMax + deluluBoost : rawMax) + padding;
+  const topPadding = deluluActive ? padding + deluluBoost + rawRange * 0.5 : padding;
+  const priceMax = (deluluActive ? rawMax + deluluBoost : rawMax) + topPadding;
   const priceLow = rawMin - padding;
   const priceRange = priceMax - priceLow;
 
@@ -996,7 +1014,7 @@ function renderChart() {
 
   // In DeLuLu mode, flip vertically AND boost up
   const candlePriceToPx = (p) => {
-    if (deluluMode) {
+    if (deluluActive) {
       // First flip the price around the midpoint of the original data
       const dataMid = (rawMax + rawMin) / 2;
       const flippedPrice = dataMid + (dataMid - p);
@@ -1048,7 +1066,7 @@ function renderChart() {
     const isUp = c.close >= c.open;
     // In DeLuLu mode, flip the emoji so drops look like pumps
     // In DeLuLu mode, flip the emoji so drops look like pumps
-    const visuallyUp = deluluMode ? !isUp : isUp;
+    const visuallyUp = deluluActive ? !isUp : isUp;
     const emoji = visuallyUp ? upEmoji : downEmoji;
     const bodySize = Math.abs(c.close - c.open);
     const emojiCount = Math.max(MIN_EMOJIS, Math.round((bodySize / maxBody) * MAX_EMOJIS));
@@ -1091,7 +1109,7 @@ function renderChart() {
 
   const currentPrice = candles[candles.length - 1].close;
   // In DeLuLu mode, show the boosted price
-  const displayPrice = deluluMode ? (currentPrice + deluluBoost) : currentPrice;
+  const displayPrice = deluluActive ? (currentPrice + deluluBoost) : currentPrice;
 
   chartEl.className = 'chart-grid';
   chartEl.innerHTML = `
