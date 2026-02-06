@@ -779,6 +779,8 @@ document.getElementById('deluluSwitch').addEventListener('click', () => {
   deluluMode = !deluluMode;
   document.getElementById('deluluSwitch').classList.toggle('active', deluluMode);
   document.body.classList.toggle('delulu-active', deluluMode);
+  // Clear pending scroll so chart re-centers on the (boosted) current price
+  pendingScrollRestore = null;
   renderChart();
 });
 
@@ -969,17 +971,40 @@ function renderChart() {
   const rawMax = Math.max(...allHighs);
   const rawMin = Math.min(...allLows);
   const rawRange = rawMax - rawMin || 1;
-  // Extend price range to match the scroll buffer so labels fill the extra space
+
+  // Calculate DeLuLu boost first so we can extend the Y-axis range
+  let deluluBoost = 0;
+  if (deluluMode) {
+    const currentPrice = candles[candles.length - 1].close;
+    // Check if natural range gives at least 20% gain appearance
+    const priceMid = (rawMax + rawMin) / 2;
+    const flippedPrice = priceMid + (priceMid - currentPrice);
+    if (flippedPrice < currentPrice * 1.2) {
+      deluluBoost = currentPrice * 0.5; // 50% boost
+    } else {
+      deluluBoost = flippedPrice - currentPrice;
+    }
+  }
+
+  // Extend price range - include boosted prices in DeLuLu mode
   const padding = rawRange * ((SCROLL_BUFFER - 1) / 2 + 0.2);
-  const priceMax = rawMax + padding;
+  const priceMax = (deluluMode ? rawMax + deluluBoost : rawMax) + padding;
   const priceLow = rawMin - padding;
   const priceRange = priceMax - priceLow;
 
   const priceToPx = (p) => ((p - priceLow) / priceRange) * SCALED_HEIGHT;
-  // In DeLuLu mode, flip candle positions vertically
+
+  // In DeLuLu mode, flip vertically AND boost up
   const candlePriceToPx = (p) => {
-    const px = priceToPx(p);
-    return deluluMode ? (SCALED_HEIGHT - px) : px;
+    if (deluluMode) {
+      // First flip the price around the midpoint of the original data
+      const dataMid = (rawMax + rawMin) / 2;
+      const flippedPrice = dataMid + (dataMid - p);
+      // Then boost it up
+      const boostedPrice = flippedPrice + deluluBoost;
+      return priceToPx(boostedPrice);
+    }
+    return priceToPx(p);
   };
 
   const bodySizes = candles.map(c => Math.abs(c.close - c.open));
@@ -1021,6 +1046,7 @@ function renderChart() {
   let xAxisHtml = '';
   candles.forEach((c, idx) => {
     const isUp = c.close >= c.open;
+    // In DeLuLu mode, flip the emoji so drops look like pumps
     // In DeLuLu mode, flip the emoji so drops look like pumps
     const visuallyUp = deluluMode ? !isUp : isUp;
     const emoji = visuallyUp ? upEmoji : downEmoji;
@@ -1064,8 +1090,8 @@ function renderChart() {
   });
 
   const currentPrice = candles[candles.length - 1].close;
-  // In DeLuLu mode, mirror price around midpoint so tag matches Y-axis position
-  const displayPrice = deluluMode ? (priceMax + priceLow - currentPrice) : currentPrice;
+  // In DeLuLu mode, show the boosted price
+  const displayPrice = deluluMode ? (currentPrice + deluluBoost) : currentPrice;
 
   chartEl.className = 'chart-grid';
   chartEl.innerHTML = `
@@ -1093,10 +1119,14 @@ function renderChart() {
     candlesScroll.scrollTop = pendingScrollRestore.scrollTop;
     pendingScrollRestore = null;
   } else {
-    // Default: scroll to right edge, center vertically
+    // Default: scroll to right edge, position current price in center of viewport
     candlesScroll.scrollLeft = candlesScroll.scrollWidth;
-    const maxScrollTop = candlesScroll.scrollHeight - candlesScroll.clientHeight;
-    candlesScroll.scrollTop = maxScrollTop > 0 ? maxScrollTop / 2 : 0;
+    // Calculate where current price candle is and center on it
+    const currentPricePx = candlePriceToPx(currentPrice);
+    const viewportHeight = candlesScroll.clientHeight;
+    // currentPricePx is from bottom, scrollTop is from top, so invert
+    const targetScrollTop = (SCALED_HEIGHT - currentPricePx) - (viewportHeight / 2);
+    candlesScroll.scrollTop = Math.max(0, Math.min(targetScrollTop, candlesScroll.scrollHeight - viewportHeight));
   }
   xAxisScroll.scrollLeft = candlesScroll.scrollLeft;
   yAxisInner.style.transform = `translateY(-${candlesScroll.scrollTop}px)`;
