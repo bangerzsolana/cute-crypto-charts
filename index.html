@@ -987,42 +987,25 @@ function renderChart() {
   const rawMin = Math.min(...allLows);
   const rawRange = rawMax - rawMin || 1;
 
-  // Calculate DeLuLu boost first so we can extend the Y-axis range
-  // DeLuLu is disabled for ETH
+  // DeLuLu mode: progressive upward tilt — always pumping!
+  // Disabled for ETH
   const deluluActive = deluluMode && currentCoin !== 'ETH';
-  let deluluBoost = 0;
-  if (deluluActive) {
-    const currentPrice = candles[candles.length - 1].close;
-    // Check if natural range gives at least 20% gain appearance
-    const priceMid = (rawMax + rawMin) / 2;
-    const flippedPrice = priceMid + (priceMid - currentPrice);
-    if (flippedPrice < currentPrice * 1.2) {
-      deluluBoost = currentPrice * 0.5; // 50% boost
-    } else {
-      deluluBoost = flippedPrice - currentPrice;
-    }
-  }
+  const totalCandles = candles.length;
+  const tiltMax = rawRange * 0.5; // right side boosted ~50% of the price range
+  const tiltOffset = (idx) => deluluActive ? (idx / (totalCandles - 1 || 1)) * tiltMax : 0;
 
-  // Extend price range - include boosted prices in DeLuLu mode with extra padding at top
+  // Extend price range — account for tilt boost on the right side
   const padding = rawRange * ((SCROLL_BUFFER - 1) / 2 + 0.2);
-  const topPadding = deluluActive ? padding + deluluBoost + rawRange * 0.5 : padding;
-  const priceMax = (deluluActive ? rawMax + deluluBoost : rawMax) + topPadding;
+  const topPadding = deluluActive ? padding + tiltMax + rawRange * 0.3 : padding;
+  const priceMax = rawMax + (deluluActive ? tiltMax : 0) + topPadding;
   const priceLow = rawMin - padding;
   const priceRange = priceMax - priceLow;
 
   const priceToPx = (p) => ((p - priceLow) / priceRange) * SCALED_HEIGHT;
 
-  // In DeLuLu mode, flip vertically AND boost up
-  const candlePriceToPx = (p) => {
-    if (deluluActive) {
-      // First flip the price around the midpoint of the original data
-      const dataMid = (rawMax + rawMin) / 2;
-      const flippedPrice = dataMid + (dataMid - p);
-      // Then boost it up
-      const boostedPrice = flippedPrice + deluluBoost;
-      return priceToPx(boostedPrice);
-    }
-    return priceToPx(p);
+  // In DeLuLu mode, apply per-candle tilt offset
+  const candlePriceToPx = (p, idx) => {
+    return priceToPx(p + tiltOffset(idx != null ? idx : totalCandles - 1));
   };
 
   const bodySizes = candles.map(c => Math.abs(c.close - c.open));
@@ -1064,19 +1047,38 @@ function renderChart() {
   let xAxisHtml = '';
   candles.forEach((c, idx) => {
     const isUp = c.close >= c.open;
-    // In DeLuLu mode, flip the emoji so drops look like pumps
-    // In DeLuLu mode, flip the emoji so drops look like pumps
-    const visuallyUp = deluluActive ? !isUp : isUp;
-    const emoji = visuallyUp ? upEmoji : downEmoji;
+    const emoji = isUp ? upEmoji : downEmoji;
     const bodySize = Math.abs(c.close - c.open);
     const emojiCount = Math.max(MIN_EMOJIS, Math.round((bodySize / maxBody) * MAX_EMOJIS));
 
-    const bodyTopPx = candlePriceToPx(Math.max(c.open, c.close));
-    const bodyBottomPx = candlePriceToPx(Math.min(c.open, c.close));
-    const highPx = candlePriceToPx(c.high);
-    const lowPx = candlePriceToPx(c.low);
+    // In DeLuLu mode, exaggerate green candles (2x body) and shrink red candles (0.4x body)
+    let adjOpen = c.open, adjClose = c.close, adjHigh = c.high, adjLow = c.low;
+    if (deluluActive) {
+      const mid = (c.open + c.close) / 2;
+      const halfBody = Math.abs(c.close - c.open) / 2;
+      if (isUp) {
+        // Green: expand body 2x — move open further down from close
+        adjOpen = mid - halfBody * 2;
+        adjClose = mid + halfBody * 2;
+        // Expand wicks proportionally
+        adjLow = c.low - halfBody;
+        adjHigh = c.high + halfBody;
+      } else {
+        // Red: shrink body to 0.4x
+        adjOpen = mid + halfBody * 0.4;
+        adjClose = mid - halfBody * 0.4;
+        // Shrink wicks proportionally
+        const wickShrink = halfBody * 0.6;
+        adjHigh = c.high - wickShrink;
+        adjLow = c.low + wickShrink;
+      }
+    }
 
-    // In DeLuLu mode positions are inverted, so recalculate which is top/bottom
+    const bodyTopPx = candlePriceToPx(Math.max(adjOpen, adjClose), idx);
+    const bodyBottomPx = candlePriceToPx(Math.min(adjOpen, adjClose), idx);
+    const highPx = candlePriceToPx(adjHigh, idx);
+    const lowPx = candlePriceToPx(adjLow, idx);
+
     const actualTop = Math.max(bodyTopPx, bodyBottomPx, highPx, lowPx);
     const actualBottom = Math.min(bodyTopPx, bodyBottomPx, highPx, lowPx);
     const bodyHigh = Math.max(bodyTopPx, bodyBottomPx);
@@ -1108,8 +1110,8 @@ function renderChart() {
   });
 
   const currentPrice = candles[candles.length - 1].close;
-  // In DeLuLu mode, show the boosted price
-  const displayPrice = deluluActive ? (currentPrice + deluluBoost) : currentPrice;
+  // In DeLuLu mode, show the tilted price for the last candle
+  const displayPrice = deluluActive ? (currentPrice + tiltOffset(totalCandles - 1)) : currentPrice;
 
   chartEl.className = 'chart-grid';
   chartEl.innerHTML = `
@@ -1119,7 +1121,7 @@ function renderChart() {
     <div class="y-axis">
       <div class="y-axis-inner" style="height:${SCALED_HEIGHT}px;">
         ${yAxisHtml}
-        <div class="price-tag" style="bottom:${candlePriceToPx(currentPrice)}px;"><div class="price-tag-label">${formatPrice(displayPrice)}</div></div>
+        <div class="price-tag" style="bottom:${candlePriceToPx(currentPrice, totalCandles - 1)}px;"><div class="price-tag-label">${formatPrice(displayPrice)}</div></div>
       </div>
     </div>
     <div class="x-axis-scroll" id="xAxisScroll">
@@ -1140,7 +1142,7 @@ function renderChart() {
     // Default: scroll to right edge, position current price in center of viewport
     candlesScroll.scrollLeft = candlesScroll.scrollWidth;
     // Calculate where current price candle is and center on it
-    const currentPricePx = candlePriceToPx(currentPrice);
+    const currentPricePx = candlePriceToPx(currentPrice, totalCandles - 1);
     const viewportHeight = candlesScroll.clientHeight;
     // currentPricePx is from bottom, scrollTop is from top, so invert
     const targetScrollTop = (SCALED_HEIGHT - currentPricePx) - (viewportHeight / 2);
